@@ -67,6 +67,7 @@ jobs:
         with:
           payload: |
             {
+              "text": "CI Status Update",
               "attachments": [
                 {
                   "color": "${{ job.status == 'success' && '#36a64f' || '#ff0000' }}",
