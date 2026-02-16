@@ -5,7 +5,10 @@ function App() {
 
   useEffect(() => {
     const apiUrl = import.meta.env.VITE_API_URL || "";
-    fetch(`${apiUrl}/api/health`).then((res) => res.json()).then((data) => setData(data)).catch((err) => console.error("Error fetching health check:", err));
+    fetch(`${apiUrl}/api/health`)
+      .then((res) => res.json())
+      .then((data) => setData(data))
+      .catch((err) => console.error("Error fetching health check:", err));
   }, []);
 
   return (
