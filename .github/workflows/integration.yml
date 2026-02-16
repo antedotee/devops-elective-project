@@ -39,6 +39,10 @@ jobs:
         working-directory: ./server
         run: npm run lint
 
+      - name: Run Server Format Check
+        working-directory: ./server
+        run: npm run format:check
+
       - name: Run Server Tests
         working-directory: ./server
         run: npm run test
@@ -51,6 +55,10 @@ jobs:
       - name: Run Client Lint
         working-directory: ./client
         run: npm run lint
+
+      - name: Run Client Format Check
+        working-directory: ./client
+        run: npm run format:check
 
       - name: Run Client Tests
         working-directory: ./client
