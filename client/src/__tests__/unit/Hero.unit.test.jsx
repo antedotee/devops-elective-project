@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import Hero from '../../components/Hero';
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import Hero from "../../components/Hero";
 
-describe('Hero — Unit Tests', () => {
+describe("Hero — Unit Tests", () => {
   it('renders the main heading "Unleash Your Style"', () => {
     render(<Hero />);
     expect(screen.getByText(/unleash your style/i)).toBeInTheDocument();
@@ -10,7 +10,9 @@ describe('Hero — Unit Tests', () => {
 
   it('renders the "Shop Now" CTA button', () => {
     render(<Hero />);
-    expect(screen.getByRole('button', { name: /shop now/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /shop now/i }),
+    ).toBeInTheDocument();
   });
 
   it('renders the "25 Million+" customer stat', () => {
@@ -18,38 +20,46 @@ describe('Hero — Unit Tests', () => {
     expect(screen.getByText(/25 million\+/i)).toBeInTheDocument();
   });
 
-  it('renders 4 avatar images from pravatar', () => {
+  it("renders 4 avatar images from pravatar", () => {
     render(<Hero />);
-    const avatars = screen.getAllByAltText('user');
+    const avatars = screen.getAllByAltText("user");
     expect(avatars).toHaveLength(4);
     avatars.forEach((img) => {
-      expect(img.src).toContain('pravatar.cc');
+      expect(img.src).toContain("pravatar.cc");
     });
   });
 
-  it('renders the hero main image with correct alt text', () => {
+  it("renders the hero main image with correct alt text", () => {
     render(<Hero />);
-    expect(screen.getByAltText('Man in sweater')).toBeInTheDocument();
+    expect(screen.getByAltText("Man in sweater")).toBeInTheDocument();
   });
 
-  it('renders the Cream Jacket product card image', () => {
+  it("renders the Cream Jacket product card image", () => {
     render(<Hero />);
-    expect(screen.getByAltText('Cream Jacket')).toBeInTheDocument();
+    expect(screen.getByAltText("Cream Jacket")).toBeInTheDocument();
   });
 
-  it('renders the Clothes Rack product card image', () => {
+  it("renders the Clothes Rack product card image", () => {
     render(<Hero />);
-    expect(screen.getByAltText('Clothes Rack')).toBeInTheDocument();
+    expect(screen.getByAltText("Clothes Rack")).toBeInTheDocument();
   });
 
   it('renders the "Explore now" button on the third card', () => {
     render(<Hero />);
-    expect(screen.getByRole('button', { name: /explore now/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /explore now/i }),
+    ).toBeInTheDocument();
   });
 
-  it('renders all 5 brand logo labels', () => {
+  it("renders all 5 brand logo labels", () => {
     render(<Hero />);
-    const brands = ['GRAPHIC STUDIO', 'S. SALVA', 'GOLDEN STUDIO', 'FURNITURE DESIGN', 'TRAVEL LOOKBOOK'];
+    const brands = [
+      "GRAPHIC STUDIO",
+      "S. SALVA",
+      "GOLDEN STUDIO",
+      "FURNITURE DESIGN",
+      "TRAVEL LOOKBOOK",
+    ];
     brands.forEach((brand) => {
       expect(screen.getByText(brand)).toBeInTheDocument();
     });

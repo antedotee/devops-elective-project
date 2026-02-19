@@ -1,19 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-    addToCart,
-    getCart,
-    getProduct,
-    getProducts,
-    removeFromCart,
-    searchProducts,
-} from '../../api/api';
+  addToCart,
+  getCart,
+  getProduct,
+  getProducts,
+  removeFromCart,
+  searchProducts,
+} from "../../api/api";
 
 const mockFetch = (data, ok = true) => {
   global.fetch = vi.fn(() =>
     Promise.resolve({
       ok,
       json: () => Promise.resolve(data),
-    })
+    }),
   );
 };
 
@@ -25,65 +25,72 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('API — Unit Tests (mocked fetch)', () => {
-  it('getProducts() calls GET /api/products', async () => {
-    const mockData = [{ id: 1, name: 'T-Shirt' }];
+describe("API — Unit Tests (mocked fetch)", () => {
+  it("getProducts() calls GET /api/products", async () => {
+    const mockData = [{ id: 1, name: "T-Shirt" }];
     mockFetch(mockData);
     const result = await getProducts();
-    expect(global.fetch).toHaveBeenCalledWith('/api/products');
+    expect(global.fetch).toHaveBeenCalledWith("/api/products");
     expect(result).toEqual(mockData);
   });
 
-  it('getProducts() returns parsed JSON array', async () => {
-    const mockData = [{ id: 1, name: 'Dress' }, { id: 2, name: 'Jeans' }];
+  it("getProducts() returns parsed JSON array", async () => {
+    const mockData = [
+      { id: 1, name: "Dress" },
+      { id: 2, name: "Jeans" },
+    ];
     mockFetch(mockData);
     const result = await getProducts();
     expect(result).toHaveLength(2);
-    expect(result[0].name).toBe('Dress');
+    expect(result[0].name).toBe("Dress");
   });
 
-  it('getProduct(id) calls GET /api/products/:id', async () => {
-    const mockData = { id: 42, name: 'Sneakers' };
+  it("getProduct(id) calls GET /api/products/:id", async () => {
+    const mockData = { id: 42, name: "Sneakers" };
     mockFetch(mockData);
     const result = await getProduct(42);
-    expect(global.fetch).toHaveBeenCalledWith('/api/products/42');
+    expect(global.fetch).toHaveBeenCalledWith("/api/products/42");
     expect(result.id).toBe(42);
   });
 
-  it('getCart() calls GET /api/cart', async () => {
+  it("getCart() calls GET /api/cart", async () => {
     const mockData = [{ id: 1, productId: 5, qty: 2 }];
     mockFetch(mockData);
     const result = await getCart();
-    expect(global.fetch).toHaveBeenCalledWith('/api/cart');
+    expect(global.fetch).toHaveBeenCalledWith("/api/cart");
     expect(result).toEqual(mockData);
   });
 
-  it('addToCart(item) sends POST to /api/cart with correct body', async () => {
+  it("addToCart(item) sends POST to /api/cart with correct body", async () => {
     const item = { productId: 3, qty: 1 };
     mockFetch({ success: true });
     await addToCart(item);
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/cart',
+      "/api/cart",
       expect.objectContaining({
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify(item),
-        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
-      })
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+      }),
     );
   });
 
-  it('removeFromCart(id) sends DELETE to /api/cart/:id', async () => {
+  it("removeFromCart(id) sends DELETE to /api/cart/:id", async () => {
     mockFetch({ success: true });
     await removeFromCart(7);
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/cart/7',
-      expect.objectContaining({ method: 'DELETE' })
+      "/api/cart/7",
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 
-  it('searchProducts(query) encodes query in URL', async () => {
-    mockFetch([{ id: 1, name: 'Blue Dress' }]);
-    await searchProducts('blue dress');
-    expect(global.fetch).toHaveBeenCalledWith('/api/products?search=blue%20dress');
+  it("searchProducts(query) encodes query in URL", async () => {
+    mockFetch([{ id: 1, name: "Blue Dress" }]);
+    await searchProducts("blue dress");
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/products?search=blue%20dress",
+    );
   });
 });
