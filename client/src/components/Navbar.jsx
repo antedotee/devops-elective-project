@@ -31,10 +31,10 @@ const Navbar = () => {
               <Link to="/faq" className="hover:text-black">FAQ</Link>
             </div>
             <div className="flex items-center space-x-4 border-l border-gray-200 pl-6 ml-2">
-              <Link to="/profile" className="text-gray-800 hover:text-black">
+              <Link to="/profile" aria-label="profile" className="text-gray-800 hover:text-black">
                 <User size={20} strokeWidth={2} />
               </Link>
-              <Link to="/cart" className="text-gray-800 hover:text-black relative">
+              <Link to="/cart" aria-label="cart" className="text-gray-800 hover:text-black relative">
                 <ShoppingBag size={20} strokeWidth={2} />
                 <span className="absolute -top-1 -right-1 bg-black text-white text-[10px] w-3.5 h-3.5 rounded-full flex items-center justify-center">2</span>
               </Link>
