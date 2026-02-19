@@ -1,17 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Routes } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import App from '../../App';
-
-// We use MemoryRouter with initial entries to simulate each route
-const renderAtRoute = (path) =>
-  render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        {/* Mirror App routes so we can test individual pages */}
-      </Routes>
-    </MemoryRouter>
-  );
 
 describe('App Integration — Route Rendering', () => {
   it('renders Navbar on the home route (/)', () => {

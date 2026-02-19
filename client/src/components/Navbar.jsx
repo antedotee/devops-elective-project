@@ -1,9 +1,7 @@
 import { AlignLeft, ChevronDown, Search, ShoppingBag, User } from 'lucide-react';
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 const Navbar = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
     <nav className="w-full bg-white z-50">

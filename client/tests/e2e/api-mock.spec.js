@@ -37,11 +37,8 @@ test.describe('Mocked API E2E', () => {
   });
 
   test('mocked POST /api/cart responds with success', async ({ page }) => {
-    let postBody = null;
-
     await page.route('/api/cart', async (route) => {
       if (route.request().method() === 'POST') {
-        postBody = await route.request().postData();
         route.fulfill({
           status: 201,
           contentType: 'application/json',
