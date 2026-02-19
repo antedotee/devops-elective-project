@@ -33,7 +33,7 @@ jobs:
       # SERVER
       - name: Install Server Dependencies
         working-directory: ./server
-        run: npm install
+        run: npm ci
 
       - name: Run Server Lint
         working-directory: ./server
@@ -50,7 +50,7 @@ jobs:
       # CLIENT
       - name: Install Client Dependencies
         working-directory: ./client
-        run: npm install
+        run: npm ci --include=optional
 
       - name: Run Client Lint
         working-directory: ./client
