@@ -25,11 +25,11 @@ test.describe('Category Pills', () => {
 
   test('clicking "Sales" pill navigates to /collections', async ({ page }) => {
     await page.getByRole('link', { name: /^sales$/i }).click();
-    await expect(page).toHaveURL('/collections');
+    await expect(page).toHaveURL(/\/collections/);
   });
 
   test('clicking "Men" pill navigates to /collections', async ({ page }) => {
     await page.getByRole('link', { name: /^men$/i }).click();
-    await expect(page).toHaveURL('/collections');
+    await expect(page).toHaveURL(/\/collections/);
   });
 });

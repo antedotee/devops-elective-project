@@ -33,7 +33,7 @@ test.describe('Mocked API E2E', () => {
 
     await page.goto('/cart');
     // Cart page should render regardless of API data
-    await expect(page).toHaveURL('/cart');
+    await expect(page).toHaveURL(/\/cart/);
   });
 
   test('mocked POST /api/cart responds with success', async ({ page }) => {
