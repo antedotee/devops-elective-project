@@ -18,7 +18,7 @@ test.describe('Homepage', () => {
   });
 
   test('15 Million+ customer stat is shown', async ({ page }) => {
-    await expect(page.getByText(/25 million\+/i)).toBeVisible();
+    await expect(page.getByText(/15 Million\+/i)).toBeVisible();
   });
 
   test('page title is set (not blank)', async ({ page }) => {

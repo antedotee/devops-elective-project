@@ -17,7 +17,7 @@ describe("Hero — Unit Tests", () => {
 
   it('renders the "15 Million+" customer stat', () => {
     render(<Hero />);
-    expect(screen.getByText(/25 million\+/i)).toBeInTheDocument();
+    expect(screen.getByText(/15 Million\+/i)).toBeInTheDocument();
   });
 
   it("renders 4 avatar images from pravatar", () => {
