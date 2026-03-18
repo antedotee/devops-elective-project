@@ -17,7 +17,7 @@ test.describe('Homepage', () => {
     await expect(page.getByRole('button', { name: /shop now/i })).toBeVisible();
   });
 
-  test('25 Million+ customer stat is shown', async ({ page }) => {
+  test('15 Million+ customer stat is shown', async ({ page }) => {
     await expect(page.getByText(/25 million\+/i)).toBeVisible();
   });
 

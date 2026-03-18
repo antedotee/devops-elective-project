@@ -15,7 +15,7 @@ describe("Hero — Unit Tests", () => {
     ).toBeInTheDocument();
   });
 
-  it('renders the "25 Million+" customer stat', () => {
+  it('renders the "15 Million+" customer stat', () => {
     render(<Hero />);
     expect(screen.getByText(/25 million\+/i)).toBeInTheDocument();
   });

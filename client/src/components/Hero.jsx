@@ -32,7 +32,7 @@ const Hero = () => {
 
             {/* Reviews Section */}
             <div className="pt-8">
-              <p className="text-2xl font-bold text-black mb-2">25 Million+</p>
+              <p className="text-2xl font-bold text-black mb-2">15 Million+</p>
               <div className="flex items-center justify-between max-w-sm">
                 <p className="text-[11px] text-gray-500 leading-snug max-w-[150px]">
                   Real reviews from our happy customers! See what fashion lovers

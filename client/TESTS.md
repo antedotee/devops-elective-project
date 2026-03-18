@@ -52,7 +52,7 @@ Unit tests check one component or function at a time. Nothing talks to the netwo
 |------|----------------|
 | Main heading | "Unleash Your Style" is on the page |
 | Shop Now button | The button is visible |
-| 25 Million+ stat | The review count text is there |
+| 15 Million+ stat | The review count text is there |
 | 4 avatar images | 4 user profile pictures load |
 | Hero image | Main image has the right alt text |
 | Cream Jacket image | Product card image loads |
@@ -141,7 +141,7 @@ E2E tests open a real browser (Chromium) and act like a user clicking around. Th
 | Hero heading loads | "Unleash Your Style" is visible on load |
 | Navbar visible | SHOPSMART logo appears |
 | Shop Now button visible | Button is on the page |
-| 25 Million+ stat visible | Review count is shown |
+| 15 Million+ stat visible | Review count is shown |
 | Page has a title | The browser tab title is not blank |
 
 ### Navigation — `tests/e2e/navigation.spec.js` (8 tests)
