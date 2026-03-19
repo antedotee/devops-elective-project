@@ -9,7 +9,11 @@ import {
 } from "../../api/api";
 
 const expectApiUrl = (pathWithLeadingSlash) =>
-  expect.stringMatching(new RegExp(`${pathWithLeadingSlash.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+  expect.stringMatching(
+    new RegExp(
+      `${pathWithLeadingSlash.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+    ),
+  );
 
 const mockFetch = (data, ok = true) => {
   global.fetch = vi.fn(() =>
