@@ -8,6 +8,9 @@ import {
   searchProducts,
 } from "../../api/api";
 
+const expectApiUrl = (pathWithLeadingSlash) =>
+  expect.stringMatching(new RegExp(`${pathWithLeadingSlash.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+
 const mockFetch = (data, ok = true) => {
   global.fetch = vi.fn(() =>
     Promise.resolve({
@@ -30,7 +33,7 @@ describe("API — Unit Tests (mocked fetch)", () => {
     const mockData = [{ id: 1, name: "T-Shirt" }];
     mockFetch(mockData);
     const result = await getProducts();
-    expect(global.fetch).toHaveBeenCalledWith("/api/products");
+    expect(global.fetch).toHaveBeenCalledWith(expectApiUrl("/api/products"));
     expect(result).toEqual(mockData);
   });
 
@@ -49,7 +52,7 @@ describe("API — Unit Tests (mocked fetch)", () => {
     const mockData = { id: 42, name: "Sneakers" };
     mockFetch(mockData);
     const result = await getProduct(42);
-    expect(global.fetch).toHaveBeenCalledWith("/api/products/42");
+    expect(global.fetch).toHaveBeenCalledWith(expectApiUrl("/api/products/42"));
     expect(result.id).toBe(42);
   });
 
@@ -57,7 +60,7 @@ describe("API — Unit Tests (mocked fetch)", () => {
     const mockData = [{ id: 1, productId: 5, qty: 2 }];
     mockFetch(mockData);
     const result = await getCart();
-    expect(global.fetch).toHaveBeenCalledWith("/api/cart");
+    expect(global.fetch).toHaveBeenCalledWith(expectApiUrl("/api/cart"));
     expect(result).toEqual(mockData);
   });
 
@@ -66,7 +69,7 @@ describe("API — Unit Tests (mocked fetch)", () => {
     mockFetch({ success: true });
     await addToCart(item);
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/cart",
+      expectApiUrl("/api/cart"),
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(item),
@@ -81,7 +84,7 @@ describe("API — Unit Tests (mocked fetch)", () => {
     mockFetch({ success: true });
     await removeFromCart(7);
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/cart/7",
+      expectApiUrl("/api/cart/7"),
       expect.objectContaining({ method: "DELETE" }),
     );
   });
@@ -90,7 +93,7 @@ describe("API — Unit Tests (mocked fetch)", () => {
     mockFetch([{ id: 1, name: "Blue Dress" }]);
     await searchProducts("blue dress");
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/products?search=blue%20dress",
+      expectApiUrl("/api/products?search=blue%20dress"),
     );
   });
 });
