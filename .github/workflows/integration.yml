@@ -72,10 +72,7 @@ jobs:
       - name: Slack Notify
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        if: ${{ always() && env.SLACK_WEBHOOK_URL != '' }}
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_CHANNEL: '#all-github-actions'
           SLACK_COLOR: ${{ job.status }}
           SLACK_TITLE: 'CI Update | ${{ github.repository }}'
@@ -85,3 +82,5 @@ jobs:
             <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>
           SLACK_USERNAME: 'GitHub CI'
           SLACK_ICON_EMOJI: ':robot_face:'
+        if: ${{ always() && env.SLACK_WEBHOOK_URL != '' }}
+        uses: rtCamp/action-slack-notify@v2
