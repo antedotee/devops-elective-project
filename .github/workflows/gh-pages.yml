@@ -1,4 +1,4 @@
-name: Deploy Vite Client to GitHub Pages
+name: Deploy Client to GitHub Pages
 
 on:
   push:
@@ -10,13 +10,19 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    env:
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
 
     defaults:
       run:
-        working-directory: client   
+        working-directory: client
 
     steps:
       - name: Checkout
@@ -26,9 +32,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test
 
       - name: Build
         run: npm run build
@@ -39,7 +53,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: client/dist   
+          path: client/dist
 
       - name: Deploy
         uses: actions/deploy-pages@v4
