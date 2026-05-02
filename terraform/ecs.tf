@@ -127,6 +127,13 @@ resource "aws_ecs_cluster" "main" {
 
 locals {
   bootstrap_node_script = "require('http').createServer((req,res)=>{const ok=req.url==='/api/health'||req.url.startsWith('/api/health?');res.writeHead(ok?200:404,{'Content-Type':'application/json'});res.end(ok?JSON.stringify({status:'ok'}):'');}).listen(5001,'0.0.0.0');"
+
+  # Managed CloudFront policy IDs (commercial aws partition). Hardcoded so Terraform does not call
+  # cloudfront:ListCachePolicies / ListOriginRequestPolicies — often denied in AWS Academy / Vocareum.
+  # https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
+  # https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-origin-request-policies.html
+  cloudfront_managed_cache_policy_caching_disabled_id    = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+  cloudfront_managed_origin_request_policy_all_viewer_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
 }
 
 resource "aws_ecs_task_definition" "bootstrap" {
@@ -179,14 +186,6 @@ resource "aws_ecs_service" "api" {
   depends_on = [aws_lb_listener.http]
 }
 
-data "aws_cloudfront_cache_policy" "nocache" {
-  name = "Managed-CachingDisabled"
-}
-
-data "aws_cloudfront_origin_request_policy" "all_viewer" {
-  name = "Managed-AllViewer"
-}
-
 resource "aws_cloudfront_distribution" "api" {
   enabled         = true
   is_ipv6_enabled = true
@@ -210,8 +209,8 @@ resource "aws_cloudfront_distribution" "api" {
     target_origin_id         = "alb"
     viewer_protocol_policy   = "redirect-to-https"
     compress                 = false
-    cache_policy_id          = data.aws_cloudfront_cache_policy.nocache.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+    cache_policy_id          = local.cloudfront_managed_cache_policy_caching_disabled_id
+    origin_request_policy_id = local.cloudfront_managed_origin_request_policy_all_viewer_id
   }
 
   restrictions {
