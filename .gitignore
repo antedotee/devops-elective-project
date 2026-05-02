@@ -19,6 +19,8 @@ build/
 coverage/
 playwright-report/
 test-results/
+server/reports/
+client/reports/
 *.snap
 
 # Logs

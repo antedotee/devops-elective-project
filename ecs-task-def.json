@@ -1,0 +1,27 @@
+{
+  "family": "shopsmart-server",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "EXECUTION_ROLE_ARN_SUBSTITUTE",
+  "containerDefinitions": [
+    {
+      "name": "shopsmart-server",
+      "image": "public.ecr.aws/docker/library/hello-world:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 5001,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "5001"
+        }
+      ]
+    }
+  ]
+}

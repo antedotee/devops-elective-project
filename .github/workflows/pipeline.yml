@@ -1,0 +1,235 @@
+# ECS Fargate backend — Terraform provisions minimal AWS stack (see terraform/). Phase 1 test reports are uploaded as workflow artifacts.
+#
+# === AWS Academy Learner Lab → GitHub Secrets ===
+# Lab credentials use temporary keys: put each value from the lab export (“AWS CLI”) into Actions secrets:
+#
+#   AWS_ACCESS_KEY_ID        ← Access key ID (required — AWS will not authenticate with secret alone)
+#   AWS_SECRET_ACCESS_KEY    ← Secret access key
+#   AWS_SESSION_TOKEN        ← Session token (always required for temporary lab credentials)
+#   AWS_REGION               ← Region for your lab session (must match where you deploy)
+#
+# Account ID is shown in the console / STS identity for debugging only — these workflows do not use an ACCOUNT_ID secret.
+#
+# Terraform remote state: CI creates/opens bucket shopsmart-tf-<github.repository_id> automatically
+# (unique per repo — no TF_STATE_BUCKET secret).
+#
+# IAM limits depend on Academy classroom policy (some labs restrict IAM, CloudFront, or s3:CreateBucket).
+#
+# === GitHub Variables (Actions → Variables) ===
+# VITE_API_BASE_URL — set once after the first successful backend deploy on main (copy Terraform output
+# api_https_base_url), then rerun “Deploy frontend to GitHub Pages” or push. Same value unless infra is recreated.
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Prepare report directories
+        run: mkdir -p server/reports client/reports
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Run server tests (JUnit report)
+        working-directory: server
+        run: npm test
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Run client unit and integration tests (Vitest JSON report)
+        working-directory: client
+        run: npm run test
+
+      - name: Upload test reports (Phase 1 artifacts)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            server/reports/
+            client/reports/
+
+  terraform:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      ecs_cluster_name: ${{ steps.tf_outputs.outputs.ecs_cluster_name }}
+      ecs_service_name: ${{ steps.tf_outputs.outputs.ecs_service_name }}
+      ecs_task_execution_role_arn: ${{ steps.tf_outputs.outputs.ecs_task_execution_role_arn }}
+      health_check_url: ${{ steps.tf_outputs.outputs.health_check_url }}
+    defaults:
+      run:
+        working-directory: terraform
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+      TF_STATE_BUCKET_NAME: shopsmart-tf-${{ github.repository_id }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Ensure Terraform state S3 bucket exists
+        run: |
+          set -euo pipefail
+          echo "State bucket: ${TF_STATE_BUCKET_NAME}"
+          if aws s3api head-bucket --bucket "${TF_STATE_BUCKET_NAME}" 2>/dev/null; then
+            echo "Bucket already exists."
+          else
+            echo "Creating bucket..."
+            if [ "${AWS_REGION}" = "us-east-1" ]; then
+              aws s3api create-bucket --bucket "${TF_STATE_BUCKET_NAME}" --region "${AWS_REGION}"
+            else
+              aws s3api create-bucket --bucket "${TF_STATE_BUCKET_NAME}" --region "${AWS_REGION}" \
+                --create-bucket-configuration "LocationConstraint=${AWS_REGION}"
+            fi
+            aws s3api put-public-access-block \
+              --bucket "${TF_STATE_BUCKET_NAME}" \
+              --public-access-block-configuration \
+              "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+            aws s3api put-bucket-versioning \
+              --bucket "${TF_STATE_BUCKET_NAME}" \
+              --versioning-configuration Status=Enabled
+          fi
+
+      - name: Terraform Init (S3 backend)
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET_NAME}" \
+            -backend-config="key=shopsmart/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -no-color -out=tfplan
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve tfplan
+
+      - name: Export Terraform outputs
+        id: tf_outputs
+        if: success()
+        run: |
+          echo "ecs_cluster_name=$(terraform output -raw ecs_cluster_name 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
+          echo "ecs_service_name=$(terraform output -raw ecs_service_name 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
+          echo "ecs_task_execution_role_arn=$(terraform output -raw ecs_task_execution_role_arn 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
+          echo "health_check_url=$(terraform output -raw health_check_url 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
+
+      - name: Print backend URLs (use api_https_base_url for GitHub Variable VITE_API_BASE_URL)
+        if: success()
+        run: |
+          terraform output -no-color api_https_base_url 2>/dev/null || true
+          terraform output -no-color health_check_url 2>/dev/null || true
+
+  deploy-ecs-fargate:
+    name: Docker build, push to ECR, deploy to ECS Fargate
+    needs: terraform
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require Terraform ECS outputs
+        env:
+          ECS_CLUSTER: ${{ needs.terraform.outputs.ecs_cluster_name }}
+          ECS_SERVICE: ${{ needs.terraform.outputs.ecs_service_name }}
+          EXEC_ROLE: ${{ needs.terraform.outputs.ecs_task_execution_role_arn }}
+        run: |
+          test -n "${ECS_CLUSTER}" && test -n "${ECS_SERVICE}" && test -n "${EXEC_ROLE}"
+
+      - name: Prepare ECS task definition
+        run: sed -i "s|EXECUTION_ROLE_ARN_SUBSTITUTE|${ECS_TASK_EXECUTION_ROLE_ARN}|g" ecs-task-def.json
+        env:
+          ECS_TASK_EXECUTION_ROLE_ARN: ${{ needs.terraform.outputs.ecs_task_execution_role_arn }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/shopsmart-server:latest
+            ${{ steps.login-ecr.outputs.registry }}/shopsmart-server:${{ github.sha }}
+
+      - name: Render Amazon ECS task definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ecs-task-def.json
+          container-name: shopsmart-server
+          image: ${{ steps.login-ecr.outputs.registry }}/shopsmart-server:${{ github.sha }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          cluster: ${{ needs.terraform.outputs.ecs_cluster_name }}
+          service: ${{ needs.terraform.outputs.ecs_service_name }}
+          wait-for-service-stability: true
+
+      - name: Verify API health (HTTPS / CloudFront)
+        env:
+          HEALTH_URL: ${{ needs.terraform.outputs.health_check_url }}
+        run: |
+          test -n "${HEALTH_URL}"
+          curl -fsS --retry 10 --retry-delay 10 "${HEALTH_URL}"
