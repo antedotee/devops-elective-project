@@ -2,15 +2,10 @@
 
 # Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION
 
-# Terraform state (S3 backend):
-#   Default bucket name: shopsmart-tf-<github.repository_id>
-#   AWS Academy / Vocareum often attaches an explicit Deny on s3:PutObject for arbitrary buckets.
-#   If PutObject fails with "explicit deny", use an instructor-approved bucket via repo Variables:
-#     TF_STATE_BUCKET_NAME     — existing bucket your lab role may write to
-#     TF_STATE_OBJECT_KEY      — optional object key (default: shopsmart/terraform.tfstate).
-#                                Use a unique path per student/repo if sharing one bucket, e.g.
-#                                shopsmart/1144916304/terraform.tfstate
-#     TF_STATE_MANAGE_BUCKET   — set to "false" to skip auto create-bucket (shared bucket already exists).
+# Terraform remote state — S3 only. CI uses a fixed bucket name per repo (no Actions Variables):
+#   Bucket: shopsmart-tf-<github.repository_id>
+#   Key:    shopsmart/terraform.tfstate
+# If head-bucket fails, CI runs create-bucket + versioning + public-access block (requires s3:CreateBucket on your role).
 
 name: CI/CD Pipeline
 
@@ -83,9 +78,7 @@ jobs:
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
-      TF_STATE_BUCKET_NAME: ${{ vars.TF_STATE_BUCKET_NAME || format('shopsmart-tf-{0}', github.repository_id) }}
-      TF_STATE_OBJECT_KEY: ${{ vars.TF_STATE_OBJECT_KEY || 'shopsmart/terraform.tfstate' }}
-      TF_STATE_MANAGE_BUCKET: ${{ vars.TF_STATE_MANAGE_BUCKET || 'true' }}
+      TF_STATE_BUCKET_NAME: shopsmart-tf-${{ github.repository_id }}
 
     steps:
       - name: Checkout
@@ -103,12 +96,8 @@ jobs:
         run: |
           set -euo pipefail
           echo "State bucket: ${TF_STATE_BUCKET_NAME}"
-          echo "State key: ${TF_STATE_OBJECT_KEY}"
           if aws s3api head-bucket --bucket "${TF_STATE_BUCKET_NAME}" 2>/dev/null; then
-            echo "Bucket reachable."
-          elif [ "${TF_STATE_MANAGE_BUCKET}" = "false" ]; then
-            echo "::error::Bucket ${TF_STATE_BUCKET_NAME} does not exist or is not reachable. TF_STATE_MANAGE_BUCKET=false — create it or fix IAM."
-            exit 1
+            echo "Bucket already exists."
           else
             echo "Creating bucket..."
             if [ "${AWS_REGION}" = "us-east-1" ]; then
@@ -130,7 +119,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${TF_STATE_BUCKET_NAME}" \
-            -backend-config="key=${TF_STATE_OBJECT_KEY}" \
+            -backend-config="key=shopsmart/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
 
@@ -156,9 +145,7 @@ jobs:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
       TF_VAR_image_tag: ${{ github.sha }}
-      TF_STATE_BUCKET_NAME: ${{ vars.TF_STATE_BUCKET_NAME || format('shopsmart-tf-{0}', github.repository_id) }}
-      TF_STATE_OBJECT_KEY: ${{ vars.TF_STATE_OBJECT_KEY || 'shopsmart/terraform.tfstate' }}
-      TF_STATE_MANAGE_BUCKET: ${{ vars.TF_STATE_MANAGE_BUCKET || 'true' }}
+      TF_STATE_BUCKET_NAME: shopsmart-tf-${{ github.repository_id }}
 
     steps:
       - name: Checkout
@@ -177,17 +164,18 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Terraform Format Check (deploy)
+        working-directory: terraform
+        run: terraform fmt -check -recursive
+
       - name: Ensure Terraform state S3 bucket exists
         run: |
           set -euo pipefail
           echo "State bucket: ${TF_STATE_BUCKET_NAME}"
-          echo "State key: ${TF_STATE_OBJECT_KEY}"
           if aws s3api head-bucket --bucket "${TF_STATE_BUCKET_NAME}" 2>/dev/null; then
             echo "State bucket OK"
-          elif [ "${TF_STATE_MANAGE_BUCKET}" = "false" ]; then
-            echo "::error::Bucket ${TF_STATE_BUCKET_NAME} not reachable. Fix name or IAM."
-            exit 1
           else
+            echo "Creating bucket..."
             if [ "${AWS_REGION}" = "us-east-1" ]; then
               aws s3api create-bucket --bucket "${TF_STATE_BUCKET_NAME}" --region "${AWS_REGION}"
             else
@@ -204,14 +192,16 @@ jobs:
           fi
 
       - name: Terraform Init (S3 backend)
+        working-directory: terraform
         run: |
           terraform init \
             -backend-config="bucket=${TF_STATE_BUCKET_NAME}" \
-            -backend-config="key=${TF_STATE_OBJECT_KEY}" \
+            -backend-config="key=shopsmart/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
 
       - name: Terraform Validate
+        working-directory: terraform
         run: terraform validate
 
       - name: Terraform apply (ECR + S3 only, first)
