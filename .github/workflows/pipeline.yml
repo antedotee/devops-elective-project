@@ -234,3 +234,6 @@ jobs:
           CLUSTER=$(terraform output -raw ecs_cluster_name)
           SERVICE=$(terraform output -raw ecs_service_name)
           aws ecs wait services-stable --cluster "${CLUSTER}" --services "${SERVICE}"
+
+      - name: Print app URL (load balancer DNS)
+        run: terraform output -no-color app_url

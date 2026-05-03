@@ -1,14 +1,32 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import Navbar from "../../components/Navbar";
+import { AuthProvider } from "../../contexts/AuthContext";
+import { CartProvider } from "../../contexts/CartContext";
 
-const renderNavbar = () =>
-  render(
+function renderNavbar() {
+  return render(
     <MemoryRouter>
-      <Navbar />
+      <AuthProvider>
+        <CartProvider>
+          <Navbar />
+        </CartProvider>
+      </AuthProvider>
     </MemoryRouter>,
   );
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  global.fetch = vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve(JSON.stringify({ user: null })),
+    }),
+  );
+});
 
 describe("Navbar — Unit Tests", () => {
   it("renders SHOPSMART logo text", () => {
@@ -22,63 +40,44 @@ describe("Navbar — Unit Tests", () => {
     expect(logo).toHaveAttribute("href", "/");
   });
 
-  it('renders "About Us" nav link with correct href', () => {
+  it('desktop "About" nav link uses /about', () => {
     renderNavbar();
-    const link = screen.getByRole("link", { name: /about us/i });
-    expect(link).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /^about$/i });
     expect(link).toHaveAttribute("href", "/about");
   });
 
-  it('renders "Blog" nav link with correct href', () => {
+  it('desktop "Blog" nav link uses /blog', () => {
     renderNavbar();
-    const link = screen.getByRole("link", { name: /blog/i });
-    expect(link).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /^blog$/i });
     expect(link).toHaveAttribute("href", "/blog");
   });
 
-  it('renders "FAQ" nav link with correct href', () => {
+  it('desktop "FAQ" nav link uses /faq', () => {
     renderNavbar();
-    const link = screen.getByRole("link", { name: /faq/i });
-    expect(link).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /^faq$/i });
     expect(link).toHaveAttribute("href", "/faq");
   });
 
-  it('renders search input with placeholder "Clothing"', () => {
+  it('search input uses placeholder "Search gear..."', () => {
     renderNavbar();
-    const input = screen.getByPlaceholderText("Clothing");
-    expect(input).toBeInTheDocument();
-    expect(input).toHaveAttribute("type", "text");
+    expect(screen.getByPlaceholderText(/search gear/i)).toBeInTheDocument();
   });
 
-  it('renders cart icon link pointing to "/cart"', () => {
+  it('cart link points to "/cart"', () => {
     renderNavbar();
-    const cartLink = screen.getByRole("link", { name: /cart/i });
+    const cartLink = screen.getByRole("link", { name: /shopping cart/i });
     expect(cartLink).toHaveAttribute("href", "/cart");
   });
 
-  it('renders cart badge with count "2"', () => {
+  it('logged-out account link goes to "/login"', () => {
     renderNavbar();
-    expect(screen.getByText("2")).toBeInTheDocument();
+    const account = screen.getByRole("link", { name: /^log in$/i });
+    expect(account).toHaveAttribute("href", "/login");
   });
 
-  it('renders profile icon link pointing to "/profile"', () => {
+  it("renders category pills including New arrivals", () => {
     renderNavbar();
-    const profileLink = screen.getByRole("link", { name: /profile/i });
-    expect(profileLink).toHaveAttribute("href", "/profile");
-  });
-
-  it("renders all 6 category navigation pills", () => {
-    renderNavbar();
-    const categories = [
-      "New Arrivals",
-      "Sales",
-      "Men",
-      "Women",
-      "Kid's",
-      "Brand",
-    ];
-    categories.forEach((cat) => {
-      expect(screen.getByText(cat)).toBeInTheDocument();
-    });
+    expect(screen.getByText(/new arrivals/i)).toBeInTheDocument();
+    expect(screen.getByText(/outerwear/i)).toBeInTheDocument();
   });
 });

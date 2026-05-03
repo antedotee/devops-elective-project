@@ -1,8 +1,18 @@
+@import url("https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
 @layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
   body {
-    @apply antialiased text-primary bg-white;
+    @apply antialiased bg-neo-bg text-neo-ink font-sans min-h-screen;
+  }
+
+  ::selection {
+    @apply bg-neo-pink text-neo-ink;
   }
 }

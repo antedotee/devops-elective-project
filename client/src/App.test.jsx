@@ -1,23 +1,21 @@
 import { render, screen } from "@testing-library/react";
 import App from "./App";
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("App", () => {
-  it("renders ShopSmart title", () => {
-    // Mock fetch
+  beforeEach(() => {
+    vi.restoreAllMocks();
     global.fetch = vi.fn(() =>
       Promise.resolve({
-        json: () =>
-          Promise.resolve({
-            status: "ok",
-            message: "Test Msg",
-            timestamp: "now",
-          }),
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ user: null })),
       }),
     );
+  });
 
+  it("renders SHOPSMART title", () => {
     render(<App />);
-    const linkElement = screen.getByText(/ShopSmart/i);
-    expect(linkElement).toBeInTheDocument();
+    expect(screen.getByText(/SHOPSMART/i)).toBeInTheDocument();
   });
 });

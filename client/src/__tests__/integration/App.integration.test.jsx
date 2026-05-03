@@ -1,64 +1,70 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  global.fetch = vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve(JSON.stringify({ user: null })),
+    }),
+  );
+});
 
 describe("App Integration — Route Rendering", () => {
   it("renders Navbar on the home route (/)", () => {
-    // App uses BrowserRouter internally — render directly, no extra router wrapper
     render(<App />);
     expect(screen.getByText("SHOPSMART")).toBeInTheDocument();
   });
 
   it("home route (/) renders Hero heading", () => {
     render(<App />);
-    expect(screen.getByText(/unleash your style/i)).toBeInTheDocument();
+    expect(screen.getByText(/stack your look loud/i)).toBeInTheDocument();
   });
 
-  it("Navbar is rendered on the home page", () => {
+  it('"About" desktop link points to /about', () => {
     render(<App />);
-    expect(screen.getByText("SHOPSMART")).toBeInTheDocument();
-  });
-
-  it('"About Us" link points to /about', () => {
-    render(<App />);
-    const link = screen.getByRole("link", { name: /about us/i });
-    expect(link).toHaveAttribute("href", "#/about");
+    const link = screen.getByRole("link", { name: /^about$/i });
+    expect(link).toHaveAttribute("href", "/about");
   });
 
   it('"Blog" link points to /blog', () => {
     render(<App />);
-    const link = screen.getByRole("link", { name: /blog/i });
-    expect(link).toHaveAttribute("href", "#/blog");
+    const link = screen.getByRole("link", { name: /^blog$/i });
+    expect(link).toHaveAttribute("href", "/blog");
   });
 
   it('"FAQ" link points to /faq', () => {
     render(<App />);
-    const link = screen.getByRole("link", { name: /faq/i });
-    expect(link).toHaveAttribute("href", "#/faq");
+    const link = screen.getByRole("link", { name: /^faq$/i });
+    expect(link).toHaveAttribute("href", "/faq");
   });
 
-  it("Cart link points to /cart", () => {
+  it('Shopping cart link points to /cart', () => {
     render(<App />);
-    const cartLink = screen.getByRole("link", { name: /cart/i });
-    expect(cartLink).toHaveAttribute("href", "#/cart");
+    const cartLink = screen.getByRole("link", { name: /shopping cart/i });
+    expect(cartLink).toHaveAttribute("href", "/cart");
   });
 
-  it("Profile link points to /profile", () => {
+  it('logged-out account shortcut points to /login', () => {
     render(<App />);
-    const profileLink = screen.getByRole("link", { name: /profile/i });
-    expect(profileLink).toHaveAttribute("href", "#/profile");
+    const loginLink = screen.getByRole("link", { name: /^log in$/i });
+    expect(loginLink).toHaveAttribute("href", "/login");
   });
 
-  it("Collections link points to /collections", () => {
+  it('"Clothing" category pill links to /collections', () => {
     render(<App />);
-    const collectionsLinks = screen.getAllByRole("link", { name: /clothing/i });
-    expect(collectionsLinks[0]).toHaveAttribute("href", "#/collections");
+    const clothingLinks = screen.getAllByRole("link", { name: /^clothing$/i });
+    expect(clothingLinks[0]).toHaveAttribute("href", "/collections");
   });
 
-  it("renders the shop now button on the home page", () => {
+  it('"Shop now" hero link targets /collections', () => {
     render(<App />);
-    expect(
-      screen.getByRole("button", { name: /shop now/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /shop now/i })).toHaveAttribute(
+      "href",
+      "/collections",
+    );
   });
 });

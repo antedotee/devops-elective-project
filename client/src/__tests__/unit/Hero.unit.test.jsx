@@ -1,72 +1,48 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import Hero from "../../components/Hero";
 
 describe("Hero — Unit Tests", () => {
-  it('renders the main heading "Unleash Your Style"', () => {
-    render(<Hero />);
-    expect(screen.getByText(/unleash your style/i)).toBeInTheDocument();
+  it('renders the main heading "Stack your look loud"', () => {
+    render(
+      <MemoryRouter>
+        <Hero />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/stack your look loud/i)).toBeInTheDocument();
   });
 
-  it('renders the "Shop Now" CTA button', () => {
-    render(<Hero />);
+  it('renders the "Shop now" link to collections', () => {
+    render(
+      <MemoryRouter>
+        <Hero />
+      </MemoryRouter>,
+    );
+    const shop = screen.getByRole("link", { name: /shop now/i });
+    expect(shop).toHaveAttribute("href", "/collections");
+  });
+
+  it("renders register CTA link", () => {
+    render(
+      <MemoryRouter>
+        <Hero />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("link", { name: /create account/i })).toHaveAttribute(
+      "href",
+      "/register",
+    );
+  });
+
+  it("renders category shortcut tiles linking to filtered shop", () => {
+    render(
+      <MemoryRouter>
+        <Hero />
+      </MemoryRouter>,
+    );
     expect(
-      screen.getByRole("button", { name: /shop now/i }),
-    ).toBeInTheDocument();
-  });
-
-  it('renders the "15 Million+" customer stat', () => {
-    render(<Hero />);
-    expect(screen.getByText(/15 Million\+/i)).toBeInTheDocument();
-  });
-
-  it("renders 4 avatar images from pravatar", () => {
-    render(<Hero />);
-    const avatars = screen.getAllByAltText("user");
-    expect(avatars).toHaveLength(4);
-    avatars.forEach((img) => {
-      expect(img.src).toContain("pravatar.cc");
-    });
-  });
-
-  it("renders the hero main image with correct alt text", () => {
-    render(<Hero />);
-    expect(screen.getByAltText("Man in sweater")).toBeInTheDocument();
-  });
-
-  it("renders the Cream Jacket product card image", () => {
-    render(<Hero />);
-    expect(screen.getByAltText("Cream Jacket")).toBeInTheDocument();
-  });
-
-  it("renders the Clothes Rack product card image", () => {
-    render(<Hero />);
-    expect(screen.getByAltText("Clothes Rack")).toBeInTheDocument();
-  });
-
-  it('renders the "Explore now" button on the third card', () => {
-    render(<Hero />);
-    expect(
-      screen.getByRole("button", { name: /explore now/i }),
-    ).toBeInTheDocument();
-  });
-
-  it("renders all 5 brand logo labels", () => {
-    render(<Hero />);
-    const brands = [
-      "GRAPHIC STUDIO",
-      "S. SALVA",
-      "GOLDEN STUDIO",
-      "FURNITURE DESIGN",
-      "TRAVEL LOOKBOOK",
-    ];
-    brands.forEach((brand) => {
-      expect(screen.getByText(brand)).toBeInTheDocument();
-    });
-  });
-
-  it('renders the "Models wearing full outfits" text', () => {
-    render(<Hero />);
-    expect(screen.getByText(/models wearing/i)).toBeInTheDocument();
+      screen.getByRole("link", { name: /outer layers/i }),
+    ).toHaveAttribute("href", "/collections?search=outerwear");
   });
 });

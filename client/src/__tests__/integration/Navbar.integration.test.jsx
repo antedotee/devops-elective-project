@@ -1,87 +1,90 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import Navbar from "../../components/Navbar";
+import { AuthProvider } from "../../contexts/AuthContext";
+import { CartProvider } from "../../contexts/CartContext";
 
-const renderNavbar = () =>
-  render(
+function renderNavbar() {
+  return render(
     <MemoryRouter>
-      <Navbar />
+      <AuthProvider>
+        <CartProvider>
+          <Navbar />
+        </CartProvider>
+      </AuthProvider>
     </MemoryRouter>,
   );
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  global.fetch = vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve(JSON.stringify({ user: null })),
+    }),
+  );
+});
 
 describe("Navbar Integration Tests", () => {
-  it("About Us link has correct href for routing", () => {
+  it('"About" link routes to /about', () => {
     renderNavbar();
-    expect(screen.getByRole("link", { name: /about us/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /^about$/i })).toHaveAttribute(
       "href",
       "/about",
     );
   });
 
-  it("Blog link has correct href for routing", () => {
+  it('"Blog" link routes to /blog', () => {
     renderNavbar();
-    expect(screen.getByRole("link", { name: /blog/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /^blog$/i })).toHaveAttribute(
       "href",
       "/blog",
     );
   });
 
-  it("Cart icon link has correct href for routing", () => {
+  it("Shopping cart icon routes to /cart", () => {
     renderNavbar();
-    expect(screen.getByRole("link", { name: /cart/i })).toHaveAttribute(
-      "href",
-      "/cart",
-    );
+    expect(
+      screen.getByRole("link", { name: /shopping cart/i }),
+    ).toHaveAttribute("href", "/cart");
   });
 
-  it("Profile icon link has correct href for routing", () => {
+  it("logged-out account icon routes to /login", () => {
     renderNavbar();
-    expect(screen.getByRole("link", { name: /profile/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /^log in$/i })).toHaveAttribute(
       "href",
-      "/profile",
+      "/login",
     );
   });
 
   it("Search input accepts typed text", async () => {
     renderNavbar();
-    const searchInput = screen.getByPlaceholderText("Clothing");
+    const searchInput = screen.getByPlaceholderText(/search gear/i);
     await userEvent.type(searchInput, "jeans");
     expect(searchInput.value).toBe("jeans");
   });
 
-  it('"Clothing" category pill links to /collections', () => {
+  it('"Clothing" pill links to /collections', () => {
     renderNavbar();
-    const clothingLinks = screen.getAllByRole("link", { name: /clothing/i });
+    const clothingLinks = screen.getAllByRole("link", { name: /^clothing$/i });
     expect(clothingLinks[0]).toHaveAttribute("href", "/collections");
   });
 
-  it('"New Arrivals" pill links to /collections', () => {
+  it('"New arrivals" pill includes search query param', () => {
     renderNavbar();
     expect(screen.getByRole("link", { name: /new arrivals/i })).toHaveAttribute(
       "href",
-      "/collections",
+      "/collections?search=New%20arrivals",
     );
   });
 
-  it('"Sales" pill links to /collections', () => {
-    renderNavbar();
-    expect(screen.getByRole("link", { name: /sales/i })).toHaveAttribute(
-      "href",
-      "/collections",
-    );
-  });
-
-  it("Cart badge displays correct item count", () => {
-    renderNavbar();
-    const badge = screen.getByText("2");
-    expect(badge).toBeInTheDocument();
-  });
-
-  it("Logo link sits inside the nav element", () => {
+  it("Logo sits inside header landmark", () => {
     renderNavbar();
     const logo = screen.getByText("SHOPSMART");
-    expect(logo.closest("nav")).toBeInTheDocument();
+    expect(logo.closest("header")).toBeInTheDocument();
   });
 });
