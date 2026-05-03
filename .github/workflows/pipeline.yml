@@ -266,11 +266,11 @@ jobs:
           fi
 
           if ! state_has 'aws_ecs_cluster\.main'; then
-            CLUSTER_ARN="$(aws ecs describe-clusters \
+            CLUSTER_NAME="$(aws ecs describe-clusters \
               --clusters "shopsmart-cluster" \
-              --query 'clusters[0].clusterArn' \
+              --query 'clusters[0].clusterName' \
               --output text 2>/dev/null || true)"
-            import_if_present aws_ecs_cluster.main "${CLUSTER_ARN}"
+            import_if_present aws_ecs_cluster.main "${CLUSTER_NAME}"
           fi
 
           if ! state_has 'aws_security_group\.ecs_sg'; then
