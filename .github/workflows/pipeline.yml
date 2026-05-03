@@ -236,28 +236,111 @@ jobs:
             ${{ steps.ecr_repo.outputs.repo_url }}:${{ github.sha }}
             ${{ steps.ecr_repo.outputs.repo_url }}:latest
 
-      - name: Import existing singleton infrastructure into Terraform state
+      - name: Import existing named infrastructure into Terraform state
         run: |
           set -euo pipefail
+
+          state_has() {
+            terraform state list | grep -q "^$1$"
+          }
+
+          import_if_present() {
+            local address="$1"
+            local id="${2:-}"
+            if [ -n "${id}" ] && [ "${id}" != "None" ] && [ "${id}" != "null" ]; then
+              terraform import "${address}" "${id}"
+            fi
+          }
+
+          DEFAULT_VPC_ID="$(aws ec2 describe-vpcs \
+            --filters Name=isDefault,Values=true \
+            --query 'Vpcs[0].VpcId' \
+            --output text)"
+
+          if ! state_has 'aws_ecr_repository\.app'; then
+            ECR_NAME="$(aws ecr describe-repositories \
+              --repository-names "shopsmart-repo" \
+              --query 'repositories[0].repositoryName' \
+              --output text 2>/dev/null || true)"
+            import_if_present aws_ecr_repository.app "${ECR_NAME}"
+          fi
+
+          if ! state_has 'aws_ecs_cluster\.main'; then
+            CLUSTER_ARN="$(aws ecs describe-clusters \
+              --clusters "shopsmart-cluster" \
+              --query 'clusters[0].clusterArn' \
+              --output text 2>/dev/null || true)"
+            import_if_present aws_ecs_cluster.main "${CLUSTER_ARN}"
+          fi
+
+          if ! state_has 'aws_security_group\.alb'; then
+            ALB_SG_ID="$(aws ec2 describe-security-groups \
+              --filters Name=vpc-id,Values="${DEFAULT_VPC_ID}" Name=group-name,Values="shopsmart-alb-sg" \
+              --query 'SecurityGroups[0].GroupId' \
+              --output text 2>/dev/null || true)"
+            import_if_present aws_security_group.alb "${ALB_SG_ID}"
+          fi
+
+          if ! state_has 'aws_security_group\.ecs_sg'; then
+            ECS_SG_ID="$(aws ec2 describe-security-groups \
+              --filters Name=vpc-id,Values="${DEFAULT_VPC_ID}" Name=group-name,Values="shopsmart-ecs-sg" \
+              --query 'SecurityGroups[0].GroupId' \
+              --output text 2>/dev/null || true)"
+            import_if_present aws_security_group.ecs_sg "${ECS_SG_ID}"
+          fi
 
           if ! terraform state list | grep -q '^aws_lb\.main$'; then
             LB_ARN="$(aws elbv2 describe-load-balancers \
               --names "shopsmart-alb" \
               --query 'LoadBalancers[0].LoadBalancerArn' \
               --output text 2>/dev/null || true)"
-            if [ -n "${LB_ARN}" ] && [ "${LB_ARN}" != "None" ]; then
-              terraform import aws_lb.main "${LB_ARN}"
+            import_if_present aws_lb.main "${LB_ARN}"
+          fi
+
+          if ! state_has 'aws_lb_target_group\.app'; then
+            TG_ARN="$(aws elbv2 describe-target-groups \
+              --names "shopsmart-tg" \
+              --query 'TargetGroups[0].TargetGroupArn' \
+              --output text 2>/dev/null || true)"
+            import_if_present aws_lb_target_group.app "${TG_ARN}"
+          fi
+
+          if ! state_has 'aws_lb_listener\.http'; then
+            LB_ARN="$(aws elbv2 describe-load-balancers \
+              --names "shopsmart-alb" \
+              --query 'LoadBalancers[0].LoadBalancerArn' \
+              --output text 2>/dev/null || true)"
+            if [ -n "${LB_ARN}" ] && [ "${LB_ARN}" != "None" ] && [ "${LB_ARN}" != "null" ]; then
+              LISTENER_ARN="$(aws elbv2 describe-listeners \
+                --load-balancer-arn "${LB_ARN}" \
+                --query 'Listeners[?Port==`80`][0].ListenerArn' \
+                --output text 2>/dev/null || true)"
+              import_if_present aws_lb_listener.http "${LISTENER_ARN}"
             fi
           fi
 
-          if ! terraform state list | grep -q '^aws_db_instance\.postgres$'; then
+          if ! state_has 'aws_db_subnet_group\.main'; then
+            DB_SUBNET_GROUP_NAME="$(aws rds describe-db-subnet-groups \
+              --db-subnet-group-name "shopsmart-db-subnets" \
+              --query 'DBSubnetGroups[0].DBSubnetGroupName' \
+              --output text 2>/dev/null || true)"
+            import_if_present aws_db_subnet_group.main "${DB_SUBNET_GROUP_NAME}"
+          fi
+
+          if ! state_has 'aws_security_group\.rds'; then
+            RDS_SG_ID="$(aws ec2 describe-security-groups \
+              --filters Name=vpc-id,Values="${DEFAULT_VPC_ID}" Name=group-name,Values="shopsmart-rds-sg" \
+              --query 'SecurityGroups[0].GroupId' \
+              --output text 2>/dev/null || true)"
+            import_if_present aws_security_group.rds "${RDS_SG_ID}"
+          fi
+
+          if ! state_has 'aws_db_instance\.postgres'; then
             DB_ID="$(aws rds describe-db-instances \
               --db-instance-identifier "shopsmart-pg" \
               --query 'DBInstances[0].DBInstanceIdentifier' \
               --output text 2>/dev/null || true)"
-            if [ -n "${DB_ID}" ] && [ "${DB_ID}" != "None" ]; then
-              terraform import aws_db_instance.postgres "${DB_ID}"
-            fi
+            import_if_present aws_db_instance.postgres "${DB_ID}"
           fi
 
       - name: Terraform apply (full stack, image tag from commit)

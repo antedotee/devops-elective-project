@@ -9,22 +9,14 @@ resource "random_password" "jwt_secret" {
 }
 
 resource "aws_db_subnet_group" "main" {
-  name_prefix = "ssdb-"
-  subnet_ids  = [for az in local.availability_zones : local.subnets_per_az[az]]
-
-  lifecycle {
-    create_before_destroy = true
-  }
+  name       = "${var.project_name}-db-subnets"
+  subnet_ids = [for az in local.availability_zones : local.subnets_per_az[az]]
 }
 
 resource "aws_security_group" "rds" {
-  name_prefix = "ssrds-"
+  name        = "${var.project_name}-rds-sg"
   description = "PostgreSQL from ECS tasks only"
   vpc_id      = data.aws_vpc.default.id
-
-  lifecycle {
-    create_before_destroy = true
-  }
 
   ingress {
     description     = "Postgres from ECS"

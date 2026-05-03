@@ -59,13 +59,9 @@ resource "aws_ecs_cluster" "main" {
 }
 
 resource "aws_security_group" "alb" {
-  name_prefix = "ssalb-"
+  name        = "${var.project_name}-alb-sg"
   description = "Public HTTP to load balancer"
   vpc_id      = data.aws_vpc.default.id
-
-  lifecycle {
-    create_before_destroy = true
-  }
 
   ingress {
     from_port   = 80
@@ -119,15 +115,11 @@ resource "aws_lb" "main" {
 }
 
 resource "aws_lb_target_group" "app" {
-  name_prefix = "sstg-"
+  name        = "${var.project_name}-tg"
   port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = data.aws_vpc.default.id
   target_type = "ip"
-
-  lifecycle {
-    create_before_destroy = true
-  }
 
   health_check {
     enabled             = true
