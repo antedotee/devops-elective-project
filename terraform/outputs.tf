@@ -30,7 +30,7 @@ output "ecs_web_service_name" {
 
 output "ecs_task_execution_role_arn" {
   description = "ECS task execution role (both services)"
-  value       = aws_iam_role.ecs_execution.arn
+  value       = local.ecs_execution_role_arn
 }
 
 output "alb_dns_name" {
@@ -50,7 +50,7 @@ output "health_check_url" {
 
 output "ecr_repository_url" {
   description = "Backend ECR repository URL"
-  value       = aws_ecr_repository.server.repository_url
+  value       = data.aws_ecr_repository.server.repository_url
 }
 
 output "ecr_client_repository_url" {

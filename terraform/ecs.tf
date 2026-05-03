@@ -16,13 +16,9 @@ locals {
   alb_subnet_ids = slice(sort(data.aws_subnets.default.ids), 0, 2)
 }
 
-resource "aws_ecr_repository" "server" {
-  name                 = "shopsmart-server"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = false
-  }
+# Often already created by earlier CI pushes; managing it here caused RepositoryAlreadyExistsException.
+data "aws_ecr_repository" "server" {
+  name = "shopsmart-server"
 }
 
 resource "aws_ecr_repository" "client" {
@@ -35,7 +31,8 @@ resource "aws_ecr_repository" "client" {
 }
 
 resource "aws_iam_role" "ecs_execution" {
-  name = "shopsmart-ecs-execution"
+  count = var.ecs_execution_role_arn == "" ? 1 : 0
+  name  = "shopsmart-ecs-execution"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -48,7 +45,8 @@ resource "aws_iam_role" "ecs_execution" {
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_execution" {
-  role       = aws_iam_role.ecs_execution.name
+  count      = var.ecs_execution_role_arn == "" ? 1 : 0
+  role       = aws_iam_role.ecs_execution[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
@@ -179,6 +177,9 @@ resource "aws_ecs_cluster" "main" {
 
 locals {
   bootstrap_node_script = "require('http').createServer((req,res)=>{const ok=req.url==='/api/health'||req.url.startsWith('/api/health?');res.writeHead(ok?200:404,{'Content-Type':'application/json'});res.end(ok?JSON.stringify({status:'ok'}):'');}).listen(5001,'0.0.0.0');"
+
+  # Academy: pass ecs_execution_role_arn. Full AWS: leave empty and Terraform creates shopsmart-ecs-execution.
+  ecs_execution_role_arn = length(aws_iam_role.ecs_execution) > 0 ? aws_iam_role.ecs_execution[0].arn : var.ecs_execution_role_arn
 }
 
 resource "aws_ecs_task_definition" "bootstrap_api" {
@@ -187,7 +188,7 @@ resource "aws_ecs_task_definition" "bootstrap_api" {
   network_mode             = "awsvpc"
   cpu                      = "256"
   memory                   = "512"
-  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  execution_role_arn       = local.ecs_execution_role_arn
 
   container_definitions = jsonencode([
     {
@@ -211,7 +212,7 @@ resource "aws_ecs_task_definition" "bootstrap_web" {
   network_mode             = "awsvpc"
   cpu                      = "256"
   memory                   = "512"
-  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  execution_role_arn       = local.ecs_execution_role_arn
 
   container_definitions = jsonencode([
     {
