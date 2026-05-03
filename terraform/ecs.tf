@@ -80,7 +80,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "ecs_sg" {
   name        = "${var.project_name}-ecs-sg"
-  description = "Inbound to app container from ALB only"
+  description = "Inbound to app container"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
@@ -115,11 +115,15 @@ resource "aws_lb" "main" {
 }
 
 resource "aws_lb_target_group" "app" {
-  name        = "${var.project_name}-tg"
+  name_prefix = "sstg-"
   port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = data.aws_vpc.default.id
   target_type = "ip"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   health_check {
     enabled             = true

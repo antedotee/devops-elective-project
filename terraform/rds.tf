@@ -9,8 +9,12 @@ resource "random_password" "jwt_secret" {
 }
 
 resource "aws_db_subnet_group" "main" {
-  name       = "${var.project_name}-db-subnets"
-  subnet_ids = [for az in local.availability_zones : local.subnets_per_az[az]]
+  name_prefix = "ssdb-"
+  subnet_ids  = [for az in local.availability_zones : local.subnets_per_az[az]]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_security_group" "rds" {
