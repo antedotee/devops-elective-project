@@ -63,6 +63,45 @@ const SEED_PRODUCTS = [
   },
 ];
 
+const PUBLIC_PRODUCTS_URL = "https://dummyjson.com/products?limit=12";
+
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+async function loadSeedProducts() {
+  try {
+    const res = await fetch(PUBLIC_PRODUCTS_URL);
+    if (!res.ok) throw new Error(`seed API returned ${res.status}`);
+    const data = await res.json();
+    const products = Array.isArray(data?.products) ? data.products : [];
+    const mapped = products
+      .map((p) => ({
+        slug: slugify(`${p.title}-${p.id}`),
+        name: String(p.title || "Untitled product").slice(0, 255),
+        description: String(p.description || ""),
+        price_cents: Math.max(100, Math.round(Number(p.price || 0) * 100)),
+        category: String(p.category || "General").slice(0, 100),
+        image_url: String(p.thumbnail || p.images?.[0] || ""),
+      }))
+      .filter((p) => p.slug && p.image_url);
+
+    if (mapped.length) {
+      console.log(`Loaded ${mapped.length} seed products from public API`);
+      return mapped;
+    }
+  } catch (err) {
+    console.warn("Falling back to bundled seed products:", err.message);
+  }
+
+  return SEED_PRODUCTS;
+}
+
 async function migrate() {
   const pool = getPool();
   if (!pool) {
@@ -96,7 +135,8 @@ async function migrate() {
       "SELECT COUNT(*)::int AS c FROM products",
     );
     if (rows[0].c === 0) {
-      for (const p of SEED_PRODUCTS) {
+      const seedProducts = await loadSeedProducts();
+      for (const p of seedProducts) {
         await client.query(
           `INSERT INTO products (slug, name, description, price_cents, category, image_url)
            VALUES ($1, $2, $3, $4, $5, $6)
@@ -111,7 +151,7 @@ async function migrate() {
           ],
         );
       }
-      console.log(`Seeded ${SEED_PRODUCTS.length} products`);
+      console.log(`Seeded ${seedProducts.length} products`);
     }
   } finally {
     client.release();
