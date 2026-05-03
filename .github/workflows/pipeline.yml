@@ -363,7 +363,70 @@ jobs:
           set -euo pipefail
           CLUSTER=$(terraform output -raw ecs_cluster_name)
           SERVICE=$(terraform output -raw ecs_service_name)
-          aws ecs wait services-stable --cluster "${CLUSTER}" --services "${SERVICE}"
+          if aws ecs wait services-stable --cluster "${CLUSTER}" --services "${SERVICE}"; then
+            exit 0
+          fi
+
+          echo "ECS service did not reach stable state. Collecting diagnostics..."
+
+          aws ecs describe-services \
+            --cluster "${CLUSTER}" \
+            --services "${SERVICE}" \
+            --query 'services[0].events[0:15].[createdAt,message]' \
+            --output table || true
+
+          TASK_ARNS="$(aws ecs list-tasks \
+            --cluster "${CLUSTER}" \
+            --service-name "${SERVICE}" \
+            --desired-status RUNNING \
+            --query 'taskArns' \
+            --output text || true)"
+          STOPPED_TASK_ARNS="$(aws ecs list-tasks \
+            --cluster "${CLUSTER}" \
+            --service-name "${SERVICE}" \
+            --desired-status STOPPED \
+            --query 'taskArns[0:10]' \
+            --output text || true)"
+
+          if [ -n "${TASK_ARNS}" ] || [ -n "${STOPPED_TASK_ARNS}" ]; then
+            aws ecs describe-tasks \
+              --cluster "${CLUSTER}" \
+              --tasks ${TASK_ARNS} ${STOPPED_TASK_ARNS} \
+              --query 'tasks[].{taskArn:taskArn,lastStatus:lastStatus,desiredStatus:desiredStatus,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[].{name:name,lastStatus:lastStatus,exitCode:exitCode,reason:reason,healthStatus:healthStatus}}' \
+              --output json || true
+          fi
+
+          TARGET_GROUP_ARN="$(aws ecs describe-services \
+            --cluster "${CLUSTER}" \
+            --services "${SERVICE}" \
+            --query 'services[0].loadBalancers[0].targetGroupArn' \
+            --output text || true)"
+          if [ -n "${TARGET_GROUP_ARN}" ] && [ "${TARGET_GROUP_ARN}" != "None" ]; then
+            aws elbv2 describe-target-health \
+              --target-group-arn "${TARGET_GROUP_ARN}" \
+              --query 'TargetHealthDescriptions[].{target:Target.Id,port:Target.Port,state:TargetHealth.State,reason:TargetHealth.Reason,description:TargetHealth.Description}' \
+              --output table || true
+          fi
+
+          LOG_GROUP="/ecs/shopsmart-task"
+          LOG_STREAMS="$(aws logs describe-log-streams \
+            --log-group-name "${LOG_GROUP}" \
+            --order-by LastEventTime \
+            --descending \
+            --max-items 5 \
+            --query 'logStreams[].logStreamName' \
+            --output text 2>/dev/null || true)"
+          for STREAM in ${LOG_STREAMS}; do
+            echo "Recent logs from ${STREAM}:"
+            aws logs get-log-events \
+              --log-group-name "${LOG_GROUP}" \
+              --log-stream-name "${STREAM}" \
+              --limit 50 \
+              --query 'events[].message' \
+              --output text || true
+          done
+
+          exit 1
 
       - name: Print app URL (load balancer DNS)
         run: terraform output -no-color app_url
