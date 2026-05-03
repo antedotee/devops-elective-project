@@ -236,6 +236,30 @@ jobs:
             ${{ steps.ecr_repo.outputs.repo_url }}:${{ github.sha }}
             ${{ steps.ecr_repo.outputs.repo_url }}:latest
 
+      - name: Import existing singleton infrastructure into Terraform state
+        run: |
+          set -euo pipefail
+
+          if ! terraform state list | grep -q '^aws_lb\.main$'; then
+            LB_ARN="$(aws elbv2 describe-load-balancers \
+              --names "shopsmart-alb" \
+              --query 'LoadBalancers[0].LoadBalancerArn' \
+              --output text 2>/dev/null || true)"
+            if [ -n "${LB_ARN}" ] && [ "${LB_ARN}" != "None" ]; then
+              terraform import aws_lb.main "${LB_ARN}"
+            fi
+          fi
+
+          if ! terraform state list | grep -q '^aws_db_instance\.postgres$'; then
+            DB_ID="$(aws rds describe-db-instances \
+              --db-instance-identifier "shopsmart-pg" \
+              --query 'DBInstances[0].DBInstanceIdentifier' \
+              --output text 2>/dev/null || true)"
+            if [ -n "${DB_ID}" ] && [ "${DB_ID}" != "None" ]; then
+              terraform import aws_db_instance.postgres "${DB_ID}"
+            fi
+          fi
+
       - name: Terraform apply (full stack, image tag from commit)
         run: terraform apply -auto-approve
 
