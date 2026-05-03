@@ -59,9 +59,13 @@ resource "aws_ecs_cluster" "main" {
 }
 
 resource "aws_security_group" "alb" {
-  name        = "${var.project_name}-alb-sg"
+  name_prefix = "ssalb-"
   description = "Public HTTP to load balancer"
   vpc_id      = data.aws_vpc.default.id
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   ingress {
     from_port   = 80
