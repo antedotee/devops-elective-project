@@ -401,6 +401,11 @@ jobs:
             --query 'tasks[0].containers[0].exitCode' \
             --output text)"
           if [ "${EXIT_CODE}" != "0" ]; then
+            aws ecs describe-tasks \
+              --cluster "${CLUSTER}" \
+              --tasks "${MIGRATION_TASK_ARN}" \
+              --query 'tasks[0].{lastStatus:lastStatus,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[].{name:name,lastStatus:lastStatus,exitCode:exitCode,reason:reason}}' \
+              --output json || true
             echo "Migration task failed with exit code ${EXIT_CODE}"
             exit 1
           fi
@@ -474,6 +479,3 @@ jobs:
           done
 
           exit 1
-
-      - name: Print app URL (load balancer DNS)
-        run: terraform output -no-color app_url
