@@ -273,14 +273,6 @@ jobs:
             import_if_present aws_ecs_cluster.main "${CLUSTER_ARN}"
           fi
 
-          if ! state_has 'aws_security_group\.alb'; then
-            ALB_SG_ID="$(aws ec2 describe-security-groups \
-              --filters Name=vpc-id,Values="${DEFAULT_VPC_ID}" Name=group-name,Values="shopsmart-alb-sg" \
-              --query 'SecurityGroups[0].GroupId' \
-              --output text 2>/dev/null || true)"
-            import_if_present aws_security_group.alb "${ALB_SG_ID}"
-          fi
-
           if ! state_has 'aws_security_group\.ecs_sg'; then
             ECS_SG_ID="$(aws ec2 describe-security-groups \
               --filters Name=vpc-id,Values="${DEFAULT_VPC_ID}" Name=group-name,Values="shopsmart-ecs-sg" \
@@ -289,7 +281,7 @@ jobs:
             import_if_present aws_security_group.ecs_sg "${ECS_SG_ID}"
           fi
 
-          if ! terraform state list | grep -q '^aws_lb\.main$'; then
+          if ! state_has 'aws_lb\.main'; then
             LB_ARN="$(aws elbv2 describe-load-balancers \
               --names "shopsmart-alb" \
               --query 'LoadBalancers[0].LoadBalancerArn' \
@@ -297,12 +289,32 @@ jobs:
             import_if_present aws_lb.main "${LB_ARN}"
           fi
 
-          if ! state_has 'aws_lb_target_group\.app'; then
-            TG_ARN="$(aws elbv2 describe-target-groups \
-              --names "shopsmart-tg" \
-              --query 'TargetGroups[0].TargetGroupArn' \
+          if ! state_has 'aws_security_group\.alb'; then
+            LB_ARN="$(aws elbv2 describe-load-balancers \
+              --names "shopsmart-alb" \
+              --query 'LoadBalancers[0].LoadBalancerArn' \
               --output text 2>/dev/null || true)"
-            import_if_present aws_lb_target_group.app "${TG_ARN}"
+            if [ -n "${LB_ARN}" ] && [ "${LB_ARN}" != "None" ] && [ "${LB_ARN}" != "null" ]; then
+              ALB_SG_ID="$(aws elbv2 describe-load-balancers \
+                --load-balancer-arns "${LB_ARN}" \
+                --query 'LoadBalancers[0].SecurityGroups[0]' \
+                --output text 2>/dev/null || true)"
+              import_if_present aws_security_group.alb "${ALB_SG_ID}"
+            fi
+          fi
+
+          if ! state_has 'aws_lb_target_group\.app'; then
+            LB_ARN="$(aws elbv2 describe-load-balancers \
+              --names "shopsmart-alb" \
+              --query 'LoadBalancers[0].LoadBalancerArn' \
+              --output text 2>/dev/null || true)"
+            if [ -n "${LB_ARN}" ] && [ "${LB_ARN}" != "None" ] && [ "${LB_ARN}" != "null" ]; then
+              TG_ARN="$(aws elbv2 describe-listeners \
+                --load-balancer-arn "${LB_ARN}" \
+                --query 'Listeners[?Port==`80`][0].DefaultActions[0].TargetGroupArn' \
+                --output text 2>/dev/null || true)"
+              import_if_present aws_lb_target_group.app "${TG_ARN}"
+            fi
           fi
 
           if ! state_has 'aws_lb_listener\.http'; then
@@ -320,17 +332,17 @@ jobs:
           fi
 
           if ! state_has 'aws_db_subnet_group\.main'; then
-            DB_SUBNET_GROUP_NAME="$(aws rds describe-db-subnet-groups \
-              --db-subnet-group-name "shopsmart-db-subnets" \
-              --query 'DBSubnetGroups[0].DBSubnetGroupName' \
+            DB_SUBNET_GROUP_NAME="$(aws rds describe-db-instances \
+              --db-instance-identifier "shopsmart-pg" \
+              --query 'DBInstances[0].DBSubnetGroup.DBSubnetGroupName' \
               --output text 2>/dev/null || true)"
             import_if_present aws_db_subnet_group.main "${DB_SUBNET_GROUP_NAME}"
           fi
 
           if ! state_has 'aws_security_group\.rds'; then
-            RDS_SG_ID="$(aws ec2 describe-security-groups \
-              --filters Name=vpc-id,Values="${DEFAULT_VPC_ID}" Name=group-name,Values="shopsmart-rds-sg" \
-              --query 'SecurityGroups[0].GroupId' \
+            RDS_SG_ID="$(aws rds describe-db-instances \
+              --db-instance-identifier "shopsmart-pg" \
+              --query 'DBInstances[0].VpcSecurityGroups[0].VpcSecurityGroupId' \
               --output text 2>/dev/null || true)"
             import_if_present aws_security_group.rds "${RDS_SG_ID}"
           fi
