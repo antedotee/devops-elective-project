@@ -14,36 +14,46 @@ output "s3_bucket_region" {
 }
 
 output "ecs_cluster_name" {
-  description = "ECS cluster for the API"
+  description = "ECS cluster"
   value       = aws_ecs_cluster.main.name
 }
 
 output "ecs_service_name" {
-  description = "ECS service name (GitHub Actions updates this service)"
+  description = "ECS API service (backend)"
   value       = aws_ecs_service.api.name
 }
 
+output "ecs_web_service_name" {
+  description = "ECS web service (frontend container)"
+  value       = aws_ecs_service.web.name
+}
+
 output "ecs_task_execution_role_arn" {
-  description = "Pass this into the ECS task definition executionRoleArn"
+  description = "ECS task execution role (both services)"
   value       = aws_iam_role.ecs_execution.arn
 }
 
 output "alb_dns_name" {
-  description = "Direct ALB DNS (HTTP only)"
+  description = "ALB DNS (HTTP)"
   value       = aws_lb.api.dns_name
 }
 
-output "api_https_base_url" {
-  description = "Use as VITE_API_BASE_URL on GitHub Pages (HTTPS)"
-  value       = "https://${aws_cloudfront_distribution.api.domain_name}"
+output "app_public_url" {
+  description = "Open in browser — SPA + /api routed by ALB"
+  value       = "http://${aws_lb.api.dns_name}"
 }
 
 output "health_check_url" {
-  description = "HTTPS URL for /api/health via CloudFront"
-  value       = "https://${aws_cloudfront_distribution.api.domain_name}/api/health"
+  description = "API health via ALB"
+  value       = "http://${aws_lb.api.dns_name}/api/health"
 }
 
 output "ecr_repository_url" {
-  description = "ECR repository URL for shopsmart-server"
+  description = "Backend ECR repository URL"
   value       = aws_ecr_repository.server.repository_url
+}
+
+output "ecr_client_repository_url" {
+  description = "Frontend ECR repository URL"
+  value       = aws_ecr_repository.client.repository_url
 }

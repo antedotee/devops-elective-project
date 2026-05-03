@@ -2,20 +2,17 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 // https://vitejs.dev/config/
-// GitHub Pages project sites are served from /<repo>/; set GITHUB_PAGES=true in CI when building for Pages.
+// Production uses VITE_API_BASE_URL=/api so the browser hits the same ALB host as the SPA.
 export default defineConfig({
-    base:
-        process.env.GITHUB_PAGES === 'true'
-            ? `/${(process.env.GITHUB_REPOSITORY || '').split('/')[1] || 'shopsmart'}/`
-            : '/',
+    base: '/',
     plugins: [react()],
     server: {
         proxy: {
             '/api': {
                 target: 'http://localhost:5001',
                 changeOrigin: true,
-            }
-        }
+            },
+        },
     },
     test: {
         globals: true,

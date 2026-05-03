@@ -1,4 +1,5 @@
-# Minimal ECS + ALB + CloudFront (HTTPS). Requires a default VPC with ≥2 subnets in the region.
+# ECS Fargate: SPA (nginx) + API (Node) behind one ALB. Default → web :80; path /api* → API :5001.
+# No CloudFront (fewer IAM calls for AWS Academy).
 
 data "aws_vpc" "default" {
   default = true
@@ -17,6 +18,15 @@ locals {
 
 resource "aws_ecr_repository" "server" {
   name                 = "shopsmart-server"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = false
+  }
+}
+
+resource "aws_ecr_repository" "client" {
+  name                 = "shopsmart-client"
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -69,9 +79,17 @@ resource "aws_security_group" "ecs_tasks" {
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description     = "App port from ALB"
+    description     = "API port"
     from_port       = 5001
     to_port         = 5001
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  ingress {
+    description     = "Web port"
+    from_port       = 80
+    to_port         = 80
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
@@ -110,6 +128,24 @@ resource "aws_lb_target_group" "api" {
   }
 }
 
+resource "aws_lb_target_group" "web" {
+  name        = "shopsmart-web-tg"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = data.aws_vpc.default.id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    path                = "/"
+    matcher             = "200"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+}
+
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.api.arn
   port              = 80
@@ -117,7 +153,23 @@ resource "aws_lb_listener" "http" {
 
   default_action {
     type             = "forward"
+    target_group_arn = aws_lb_target_group.web.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "api_paths" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
     target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api*"]
+    }
   }
 }
 
@@ -127,16 +179,9 @@ resource "aws_ecs_cluster" "main" {
 
 locals {
   bootstrap_node_script = "require('http').createServer((req,res)=>{const ok=req.url==='/api/health'||req.url.startsWith('/api/health?');res.writeHead(ok?200:404,{'Content-Type':'application/json'});res.end(ok?JSON.stringify({status:'ok'}):'');}).listen(5001,'0.0.0.0');"
-
-  # Managed CloudFront policy IDs (commercial aws partition). Hardcoded so Terraform does not call
-  # cloudfront:ListCachePolicies / ListOriginRequestPolicies — often denied in AWS Academy / Vocareum.
-  # https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
-  # https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-origin-request-policies.html
-  cloudfront_managed_cache_policy_caching_disabled_id    = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-  cloudfront_managed_origin_request_policy_all_viewer_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
 }
 
-resource "aws_ecs_task_definition" "bootstrap" {
+resource "aws_ecs_task_definition" "bootstrap_api" {
   family                   = "shopsmart-server"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -160,10 +205,33 @@ resource "aws_ecs_task_definition" "bootstrap" {
   ])
 }
 
+resource "aws_ecs_task_definition" "bootstrap_web" {
+  family                   = "shopsmart-client"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = "256"
+  memory                   = "512"
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "shopsmart-client"
+      image     = "public.ecr.aws/nginx/nginx:stable-alpine"
+      essential = true
+      portMappings = [
+        {
+          containerPort = 80
+          protocol      = "tcp"
+        }
+      ]
+    }
+  ])
+}
+
 resource "aws_ecs_service" "api" {
   name            = "shopsmart-api"
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.bootstrap.arn
+  task_definition = aws_ecs_task_definition.bootstrap_api.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
@@ -183,44 +251,30 @@ resource "aws_ecs_service" "api" {
     container_port   = 5001
   }
 
-  depends_on = [aws_lb_listener.http]
+  depends_on = [aws_lb_listener_rule.api_paths]
 }
 
-resource "aws_cloudfront_distribution" "api" {
-  enabled         = true
-  is_ipv6_enabled = true
-  price_class     = "PriceClass_100"
+resource "aws_ecs_service" "web" {
+  name            = "shopsmart-web"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.bootstrap_web.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
 
-  origin {
-    domain_name = aws_lb.api.dns_name
-    origin_id   = "alb"
-
-    custom_origin_config {
-      http_port              = 80
-      https_port             = 443
-      origin_protocol_policy = "http-only"
-      origin_ssl_protocols   = ["TLSv1.2"]
-    }
+  lifecycle {
+    ignore_changes = [task_definition]
   }
 
-  default_cache_behavior {
-    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods           = ["GET", "HEAD"]
-    target_origin_id         = "alb"
-    viewer_protocol_policy   = "redirect-to-https"
-    compress                 = false
-    cache_policy_id          = local.cloudfront_managed_cache_policy_caching_disabled_id
-    origin_request_policy_id = local.cloudfront_managed_origin_request_policy_all_viewer_id
+  network_configuration {
+    subnets          = local.alb_subnet_ids
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = true
   }
 
-  restrictions {
-    geo_restriction {
-      restriction_type = "none"
-    }
-  }
-
-  viewer_certificate {
-    cloudfront_default_certificate = true
+  load_balancer {
+    target_group_arn = aws_lb_target_group.web.arn
+    container_name   = "shopsmart-client"
+    container_port   = 80
   }
 
   depends_on = [aws_lb_listener.http]
