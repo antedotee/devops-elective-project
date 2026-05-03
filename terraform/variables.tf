@@ -10,13 +10,20 @@ variable "bucket_prefix" {
   default     = "shopsmart-assets"
 }
 
-variable "ecs_execution_role_arn" {
-  description = <<-EOT
-    Existing IAM role ARN for ECS task execution (pull from ECR, etc.).
-    Required when your lab denies iam:CreateRole (common on AWS Academy).
-    Must trust ecs-tasks.amazonaws.com and attach AmazonECSTaskExecutionRolePolicy.
-    Leave empty only if Terraform may create role shopsmart-ecs-execution (full-access accounts).
-  EOT
+variable "project_name" {
+  description = "Prefix for ECS cluster, service, task family, and ECR repository names"
   type        = string
-  default     = ""
+  default     = "shopsmart"
+}
+
+variable "image_tag" {
+  description = "Tag for the single app image in ECR (CI sets github.sha)"
+  type        = string
+  default     = "latest"
+}
+
+variable "container_port" {
+  description = "Port Express listens on inside the container"
+  type        = number
+  default     = 3000
 }

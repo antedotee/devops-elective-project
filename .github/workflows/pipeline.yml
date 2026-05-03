@@ -1,13 +1,8 @@
-# Full stack on AWS: Terraform → ALB routes / → SPA (ECS + nginx), /api* → API (ECS + Node).
-# CI builds/pushes both images to ECR and rolls out both ECS services (same pattern as backend-only flow).
+# Single Docker image: Express serves API + SPA. ECS uses IAM role LabRole (Terraform data source).
 
-# === GitHub Secrets (Actions → Secrets) ===
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION
-#
-# AWS Academy / Vocareum — also add ECS_EXECUTION_ROLE_ARN (full ARN of ecsTaskExecutionRole or lab role).
-# Vocareum usually denies iam:CreateRole; Terraform then skips creating shopsmart-ecs-execution.
+# Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION
 
-# Remote state bucket (created automatically): shopsmart-tf-<github.repository_id>
+# Remote state bucket: shopsmart-tf-<github.repository_id>
 
 name: CI/CD Pipeline
 
@@ -38,7 +33,7 @@ jobs:
             client/package-lock.json
 
       - name: Prepare report directories
-        run: mkdir -p server/reports client/reports
+        run: mkdir -p server/reports client/reports server/public
 
       - name: Install server dependencies
         working-directory: server
@@ -70,13 +65,6 @@ jobs:
   terraform:
     needs: test
     runs-on: ubuntu-latest
-    outputs:
-      ecs_cluster_name: ${{ steps.tf_outputs.outputs.ecs_cluster_name }}
-      ecs_service_name: ${{ steps.tf_outputs.outputs.ecs_service_name }}
-      ecs_web_service_name: ${{ steps.tf_outputs.outputs.ecs_web_service_name }}
-      ecs_task_execution_role_arn: ${{ steps.tf_outputs.outputs.ecs_task_execution_role_arn }}
-      health_check_url: ${{ steps.tf_outputs.outputs.health_check_url }}
-      app_public_url: ${{ steps.tf_outputs.outputs.app_public_url }}
     defaults:
       run:
         working-directory: terraform
@@ -87,7 +75,6 @@ jobs:
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
-      TF_VAR_ecs_execution_role_arn: ${{ secrets.ECS_EXECUTION_ROLE_ARN }}
       TF_STATE_BUCKET_NAME: shopsmart-tf-${{ github.repository_id }}
 
     steps:
@@ -139,52 +126,32 @@ jobs:
       - name: Terraform Plan
         run: terraform plan -no-color -out=tfplan
 
-      - name: Terraform Apply
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve tfplan
-
-      - name: Export Terraform outputs
-        id: tf_outputs
-        if: success()
-        run: |
-          echo "ecs_cluster_name=$(terraform output -raw ecs_cluster_name 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
-          echo "ecs_service_name=$(terraform output -raw ecs_service_name 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
-          echo "ecs_web_service_name=$(terraform output -raw ecs_web_service_name 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
-          echo "ecs_task_execution_role_arn=$(terraform output -raw ecs_task_execution_role_arn 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
-          echo "health_check_url=$(terraform output -raw health_check_url 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
-          echo "app_public_url=$(terraform output -raw app_public_url 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
-
-      - name: Print app URL
-        if: success()
-        run: |
-          terraform output -no-color app_public_url 2>/dev/null || true
-          terraform output -no-color health_check_url 2>/dev/null || true
-
-  deploy-ecs-fargate:
-    name: Build/push ECR images and deploy API + web to ECS
-    needs: terraform
+  deploy:
+    name: Push monolith image and apply Terraform
+    needs: [test, terraform]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+      TF_VAR_image_tag: ${{ github.sha }}
+      TF_STATE_BUCKET_NAME: shopsmart-tf-${{ github.repository_id }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Require Terraform outputs
-        env:
-          ECS_CLUSTER: ${{ needs.terraform.outputs.ecs_cluster_name }}
-          ECS_API: ${{ needs.terraform.outputs.ecs_service_name }}
-          ECS_WEB: ${{ needs.terraform.outputs.ecs_web_service_name }}
-          EXEC_ROLE: ${{ needs.terraform.outputs.ecs_task_execution_role_arn }}
-        run: |
-          test -n "${ECS_CLUSTER}" && test -n "${ECS_API}" && test -n "${ECS_WEB}" && test -n "${EXEC_ROLE}"
-
-      - name: Prepare ECS task definitions
-        run: sed -i "s|EXECUTION_ROLE_ARN_SUBSTITUTE|${ECS_TASK_EXECUTION_ROLE_ARN}|g" ecs-task-def.json ecs-task-def-frontend.json
-        env:
-          ECS_TASK_EXECUTION_ROLE_ARN: ${{ needs.terraform.outputs.ecs_task_execution_role_arn }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -194,63 +161,76 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Ensure Terraform state S3 bucket exists
+        run: |
+          set -euo pipefail
+          if aws s3api head-bucket --bucket "${TF_STATE_BUCKET_NAME}" 2>/dev/null; then
+            echo "State bucket OK"
+          else
+            if [ "${AWS_REGION}" = "us-east-1" ]; then
+              aws s3api create-bucket --bucket "${TF_STATE_BUCKET_NAME}" --region "${AWS_REGION}"
+            else
+              aws s3api create-bucket --bucket "${TF_STATE_BUCKET_NAME}" --region "${AWS_REGION}" \
+                --create-bucket-configuration "LocationConstraint=${AWS_REGION}"
+            fi
+            aws s3api put-public-access-block \
+              --bucket "${TF_STATE_BUCKET_NAME}" \
+              --public-access-block-configuration \
+              "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+            aws s3api put-bucket-versioning \
+              --bucket "${TF_STATE_BUCKET_NAME}" \
+              --versioning-configuration Status=Enabled
+          fi
+
+      - name: Terraform Init (S3 backend)
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET_NAME}" \
+            -backend-config="key=shopsmart/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform apply (ECR + S3 only, first)
+        run: |
+          set -euo pipefail
+          terraform apply -auto-approve \
+            -target=random_id.bucket_suffix \
+            -target=aws_s3_bucket.app_bucket \
+            -target=aws_s3_bucket_versioning.app_bucket_versioning \
+            -target=aws_s3_bucket_server_side_encryption_configuration.app_bucket_encryption \
+            -target=aws_s3_bucket_public_access_block.app_bucket_public_access_block \
+            -target=aws_ecr_repository.app
+
+      - name: ECR repository URL for Docker tags
+        id: ecr_repo
+        run: echo "repo_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push API image
+      - name: Build and push app image
         uses: docker/build-push-action@v5
         with:
-          context: ./server
+          context: .
+          file: Dockerfile
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/shopsmart-server:latest
-            ${{ steps.login-ecr.outputs.registry }}/shopsmart-server:${{ github.sha }}
+            ${{ steps.ecr_repo.outputs.repo_url }}:${{ github.sha }}
+            ${{ steps.ecr_repo.outputs.repo_url }}:latest
 
-      - name: Render API task definition
-        id: render-api
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: ecs-task-def.json
-          container-name: shopsmart-server
-          image: ${{ steps.login-ecr.outputs.registry }}/shopsmart-server:${{ github.sha }}
+      - name: Terraform apply (full stack, image tag from commit)
+        run: terraform apply -auto-approve
 
-      - name: Deploy API service
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-api.outputs.task-definition }}
-          cluster: ${{ needs.terraform.outputs.ecs_cluster_name }}
-          service: ${{ needs.terraform.outputs.ecs_service_name }}
-          wait-for-service-stability: true
-
-      - name: Build and push web image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./client
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/shopsmart-client:latest
-            ${{ steps.login-ecr.outputs.registry }}/shopsmart-client:${{ github.sha }}
-
-      - name: Render web task definition
-        id: render-web
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: ecs-task-def-frontend.json
-          container-name: shopsmart-client
-          image: ${{ steps.login-ecr.outputs.registry }}/shopsmart-client:${{ github.sha }}
-
-      - name: Deploy web service
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-web.outputs.task-definition }}
-          cluster: ${{ needs.terraform.outputs.ecs_cluster_name }}
-          service: ${{ needs.terraform.outputs.ecs_web_service_name }}
-          wait-for-service-stability: true
-
-      - name: Verify API health via ALB
-        env:
-          HEALTH_URL: ${{ needs.terraform.outputs.health_check_url }}
+      - name: Wait for ECS service stable
         run: |
-          test -n "${HEALTH_URL}"
-          curl -fsS --retry 10 --retry-delay 10 "${HEALTH_URL}"
+          set -euo pipefail
+          CLUSTER=$(terraform output -raw ecs_cluster_name)
+          SERVICE=$(terraform output -raw ecs_service_name)
+          aws ecs wait services-stable --cluster "${CLUSTER}" --services "${SERVICE}"

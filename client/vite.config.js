@@ -2,7 +2,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 // https://vitejs.dev/config/
-// Production uses VITE_API_BASE_URL=/api so the browser hits the same ALB host as the SPA.
+// Production uses VITE_API_BASE_URL=/api so the browser calls the same Express origin as the SPA.
 export default defineConfig({
     base: '/',
     plugins: [react()],

@@ -1,7 +1,10 @@
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 
 const app = express();
+
+const publicDir = path.join(__dirname, "..", "public");
 
 // Middleware
 app.use(cors());
@@ -16,9 +19,16 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Root Route (optional, just to show something)
-app.get("/", (req, res) => {
-  res.send("ShopSmart Backend Service");
+// Built SPA (production Docker image copies client/dist → server/public)
+app.use(express.static(publicDir));
+
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    return next();
+  }
+  res.sendFile(path.join(publicDir, "index.html"), (err) => {
+    if (err) next(err);
+  });
 });
 
 module.exports = app;
